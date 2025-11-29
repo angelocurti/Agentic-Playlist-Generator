@@ -1,0 +1,14 @@
+langchain
+langchain-google-genai
+langchain-perplexity
+langgraph
+spotipy
+fastmcp
+httpx
+lyricsgenius
+beautifulsoup4
+fastapi
+uvicorn
+sse-starlette
+aiosqlite
+redis

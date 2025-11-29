@@ -1,0 +1,36 @@
+services:
+  # Backend API (FastAPI)
+  - type: web
+    name: playlist-generator-api
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn src.api:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PPLX_API_KEY
+        sync: false
+      - key: SPOTIPY_CLIENT_ID
+        sync: false
+      - key: SPOTIPY_CLIENT_SECRET
+        sync: false
+      - key: SPOTIPY_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+
+  # Frontend (Next.js)
+  - type: web
+    name: playlist-generator-frontend
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
+    envVars:
+      - key: NODE_VERSION
+        value: 18.17.0
+      - key: NEXT_PUBLIC_API_URL
+        sync: false

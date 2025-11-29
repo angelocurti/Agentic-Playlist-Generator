@@ -1,0 +1,28 @@
+{
+  "name": "your-music-playlist-generator",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "react": "^18",
+    "react-dom": "^18",
+    "next": "^14",
+    "framer-motion": "^10",
+    "lucide-react": "^0.263.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "typescript": "^5",
+    "tailwindcss": "^3",
+    "postcss": "^8",
+    "autoprefixer": "^10"
+  }
+}
