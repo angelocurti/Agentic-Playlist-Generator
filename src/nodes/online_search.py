@@ -9,13 +9,13 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from typing import List, Dict, Any
 
 # --- CONFIGURATION ---
-MAX_ITERATIONS = 5 # Reduced for speed - encourages massive parallel calls
-MIN_SONGS_FOR_EARLY_STOP = 20
+MAX_ITERATIONS = 10 # Increased for deeper research
+MIN_SONGS_FOR_EARLY_STOP = 25 # Higher threshold for quality
 
 async def _run_agentic_search(playlist_context: str, user_request: str):
     """
-    Executes a FAST & AUTONOMOUS AGENTIC SEARCH.
-    OPTIMIZED FOR SPEED: Parallelizes tool calls and removes rigid steps.
+    Executes a DEEP AGENTIC SEARCH where the LLM autonomously decides which MCP tools to call.
+    OPTIMIZED FOR QUALITY: Prioritizes deep understanding and curation over speed.
     """
     server_params = StdioServerParameters(
         command="python",
@@ -39,10 +39,9 @@ async def _run_agentic_search(playlist_context: str, user_request: str):
                 }
                 tools_description.append(tool_info)
             
-            # HIGH SPEED AUTONOMOUS PROMPT
+            # HIGH QUALITY SYSTEM PROMPT
             agent_prompt = f"""
-You are an Elite Music Curator optimized for SPEED and AUTONOMY.
-You have access to these tools:
+You are an Elite Music Curator and Researcher. You have access to advanced MCP tools:
 
 {json.dumps(tools_description, indent=2)}
 
@@ -50,26 +49,27 @@ YOUR GOAL: Create a "Perfect Playlist" based on:
 - Context: {playlist_context}
 - User Request: {user_request}
 
-CORE INSTRUCTIONS:
-1. **BE FAST & PARALLEL**: Do NOT work sequentially. Call MULTIPLE tools in a single turn.
-   - Example: Analyze vibe AND search for tracks AND check themes ALL AT ONCE.
-2. **BE AUTONOMOUS**: You have no fixed steps. Decide the best path to get results quickly.
-3. **MAXIMIZE COVERAGE**: Get a diverse list of songs (15-20+) as fast as possible.
+ISTRUZIONI IMPORTANTI:
+1. **CHIAMATE PARALLELE**: Puoi chiamare MULTIPLI tool nella stessa iterazione per efficienza
+2. Decidi autonomamente QUALI tool chiamare e in CHE ORDINE
+3. Puoi chiamare lo stesso tool più volte con parametri diversi se necessario
+4. Quando hai raccolto abbastanza informazioni (15-20 canzoni varie), termina
 
-RESPONSE FORMATS:
+FORMATI DI RISPOSTA:
 
-To call tools (USE MASSIVE PARALLELISM):
+Per chiamare UN SOLO tool:
+{{"action": "call_tool", "tool": "nome_tool", "arguments": {{"param": "valore"}}}}
+
+Per chiamare MULTIPLI tool in PARALLELO (CONSIGLIATO):
 {{"action": "call_tools", "calls": [
-  {{"tool": "analyze_musical_vibe_deep", "arguments": {{...}}}},
-  {{"tool": "search_curated_tracklist", "arguments": {{...}}}},
-  {{"tool": "search_lyrical_themes", "arguments": {{...}}}}
+  {{"tool": "tool_name", "arguments": {{"arg": "value"}}}},
+  ...
 ]}}
 
-To finish (when you have enough good songs):
+To finish:
 {{"action": "finish", "final_songs": "List of songs with Title - Artist"}}
 
-GOAL: Get the job done in 1-2 turns maximum.
-DO NOT use markdown code blocks (```json). Just return the raw JSON string.
+Start by ANALYZING the vibe deeply.
 """
             
             messages = [
@@ -89,12 +89,6 @@ DO NOT use markdown code blocks (```json). Just return the raw JSON string.
                 
                 try:
                     content = response.content.strip()
-                    
-                    # Clean markdown if present
-                    if "```" in content:
-                        content = content.replace("```json", "").replace("```", "")
-                    
-                    content = content.strip()
                     
                     if "{" in content:
                         json_start = content.find("{")
