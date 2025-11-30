@@ -115,15 +115,20 @@ RISPONDI IN QUESTO FORMATO JSON ESATTO:
     "playlist_title": "Titolo Playlist Creativo"
 }}
 
-IMPORTANTE: Rispondi SOLO con il JSON, senza altro testo."""
+IMPORTANTE: Rispondi SOLO con il JSON, senza altro testo. Non usare blocchi markdown (```json)."""
 
     try:
         start_llm = time.time()
         extraction = llm_orch.invoke([
-            SystemMessage(content="Sei un esperto di musica e data extraction. Rispondi sempre in JSON valido."),
+            SystemMessage(content="Sei un esperto di musica e data extraction. Rispondi sempre in JSON valido. NON usare markdown."),
             HumanMessage(content=combined_prompt)
         ])
-        content = extraction.content.replace("```json", "").replace("```", "").strip()
+        # Pulizia robusta del contenuto
+        content = extraction.content.strip()
+        if "```" in content:
+            content = content.replace("```json", "").replace("```", "")
+        content = content.strip()
+        
         parsed = json.loads(content)
         
         songs_to_add = parsed.get("songs", [])
@@ -172,13 +177,21 @@ IMPORTANTE: Rispondi SOLO con il JSON, senza altro testo."""
         return {"error": f"Spotify authentication failed: {e}"}
     
     # 3. Create Playlist on Spotify
-    try:
-        playlist = sp.user_playlist_create(user_id, playlist_name, public=True)
-        playlist_id = playlist["id"]
-        playlist_url = playlist["external_urls"]["spotify"]
-        print(f"[Playlist] ✓ Playlist creata: {playlist_name} (User: {user_id})")
-    except Exception as e:
-        return {"error": f"Failed to create playlist: {e}"}
+    # 3. Create Playlist on Spotify (Only if authenticated)
+    playlist_id = None
+    playlist_url = None
+    
+    if user_id:
+        try:
+            playlist = sp.user_playlist_create(user_id, playlist_name, public=True)
+            playlist_id = playlist["id"]
+            playlist_url = playlist["external_urls"]["spotify"]
+            print(f"[Playlist] ✓ Playlist creata: {playlist_name} (User: {user_id})")
+        except Exception as e:
+            print(f"[Playlist] ⚠ Failed to create playlist on Spotify: {e}")
+            # Continue to just return the list of songs
+    else:
+        print("[Playlist] ⚠ No user ID available, skipping Spotify playlist creation.")
 
     # 4. Search Tracks in PARALLEL con CACHE LRU
     print(f"[Playlist] Cercando {len(songs_to_add)} tracce (con cache)...")
@@ -217,16 +230,15 @@ IMPORTANTE: Rispondi SOLO con il JSON, senza altro testo."""
     if not track_uris:
         return {"error": "No tracks found on Spotify"}
 
-    # 5. Add tracks to playlist in BATCHES
-    batch_size = 100
-    print(f"[Playlist] Aggiungo {len(track_uris)} tracce...")
-    
-    try:
-        for i in range(0, len(track_uris), batch_size):
-            batch = track_uris[i:i + batch_size]
-            sp.playlist_add_items(playlist_id, batch)
-    except Exception as e:
-        return {"error": f"Failed to add tracks: {e}"}
+    # 5. Add tracks to playlist in BATCHES (If playlist exists)
+    if playlist_id:
+        print(f"[Playlist] Aggiungo {len(track_uris)} tracce...")
+        try:
+            for i in range(0, len(track_uris), batch_size):
+                batch = track_uris[i:i + batch_size]
+                sp.playlist_add_items(playlist_id, batch)
+        except Exception as e:
+            print(f"[Playlist] ⚠ Failed to add tracks: {e}")
     
     # 6. Check duration and fill with recommendations if needed
     total_duration_ms = sum(track_durations_ms)
@@ -265,7 +277,11 @@ IMPORTANTE: Rispondi SOLO con il JSON, senza altro testo."""
             
             if random_tracks_to_add:
                 rec_uris = [t["uri"] for t in random_tracks_to_add]
-                sp.playlist_add_items(playlist_id, rec_uris)
+                if playlist_id:
+                    try:
+                        sp.playlist_add_items(playlist_id, rec_uris)
+                    except Exception as e:
+                        print(f"[Playlist] Failed to add recommendations: {e}")
                 
                 for rec_track in random_tracks_to_add:
                     track_uris.append(rec_track["uri"])
@@ -287,7 +303,13 @@ IMPORTANTE: Rispondi SOLO con il JSON, senza altro testo."""
 
     print(f"[Playlist] ✅ Completato: {len(track_uris)} tracce, {total_duration_min:.1f} minuti")
     
+    msg_content = f"Playlist generated! Duration: {total_duration_min:.1f} min ({len(track_uris)} tracks)."
+    if playlist_url:
+        msg_content += f"\nSpotify Link: {playlist_url}"
+    else:
+        msg_content += "\n(Login to save to Spotify)"
+
     return {
         "generated_playlist": generated_playlist_info, 
-        "messages": [f"Playlist created successfully! Link: {playlist_url}\nDurata: {total_duration_min:.1f} minuti ({len(track_uris)} tracce)"]
+        "messages": [msg_content]
     }

@@ -73,6 +73,7 @@ To finish:
 {{"action": "finish", "final_songs": "List of songs with Title - Artist"}}
 
 Start by ANALYZING the vibe deeply.
+DO NOT use markdown code blocks (```json). Just return the raw JSON string.
 """
             
             messages = [
@@ -92,6 +93,12 @@ Start by ANALYZING the vibe deeply.
                 
                 try:
                     content = response.content.strip()
+                    
+                    # Clean markdown if present
+                    if "```" in content:
+                        content = content.replace("```json", "").replace("```", "")
+                    
+                    content = content.strip()
                     
                     if "{" in content:
                         json_start = content.find("{")

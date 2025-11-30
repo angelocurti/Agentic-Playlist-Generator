@@ -299,6 +299,7 @@ async def generate_playlist_async(task_id: str, description: str, duration_minut
         duration_info = None
         track_count = len(generated_playlist) if generated_playlist else 0
         
+        dur_match = None
         for msg in reversed(final_messages):
             content = msg.content if hasattr(msg, 'content') else str(msg)
             

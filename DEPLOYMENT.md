@@ -51,24 +51,30 @@ git push origin main
 
 ## 🎨 Step 3: Deploy Frontend (Next.js)
 
-1. In Render Dashboard, click **"New +"** → **"Static Site"**
+**IMPORTANT**: Next.js with App Router must be deployed as a **Web Service** (not Static Site) because it requires server-side rendering.
+
+1. In Render Dashboard, click **"New +"** → **"Web Service"**
 2. Connect the same GitHub repository
 3. Configure:
    - **Name**: `playlist-generator-frontend`
-   - **Region**: Frankfurt
+   - **Region**: Frankfurt (or closest to you)
    - **Branch**: `main`
    - **Root Directory**: Leave empty
+   - **Runtime**: `Node`
    - **Build Command**: `npm install && npm run build`
-   - **Publish Directory**: `.next`
+   - **Start Command**: `npm start`
    - **Plan**: Free
 
-4. **Environment Variables**:
+4. **Environment Variables** (click "Advanced" → "Add Environment Variable"):
    ```
+   NODE_VERSION=18
    NEXT_PUBLIC_API_URL=https://YOUR-BACKEND-URL.onrender.com
    ```
    (Replace with your actual backend URL from Step 2)
 
-5. Click **"Create Static Site"**
+5. Click **"Create Web Service"**
+
+**Note**: The `start.js` script automatically handles the PORT environment variable provided by Render.
 
 ## 🎵 Step 4: Update Spotify Developer Dashboard
 
@@ -83,10 +89,14 @@ git push origin main
 
 ## ✅ Step 5: Verify Deployment
 
-1. Visit your frontend URL: `https://playlist-generator-frontend.onrender.com`
-2. Test the Spotify login flow
-3. Generate a test playlist
-4. Check backend logs in Render dashboard if issues occur
+1. Wait for both services to finish deploying (check Render dashboard)
+2. Visit your frontend URL: `https://playlist-generator-frontend.onrender.com`
+3. Check browser console for any errors
+4. Test the Spotify login flow
+5. Generate a test playlist
+6. Check backend and frontend logs in Render dashboard if issues occur
+
+**Tip**: On the free tier, services may take 30-60 seconds to wake up on first request after inactivity.
 
 ## ⚠️ Important Notes
 
@@ -124,10 +134,17 @@ Render will automatically redeploy both services.
 - Verify all environment variables are set
 - Ensure `requirements.txt` is complete
 
+### Frontend won't start or shows errors
+- Check logs in Render dashboard for build/start errors
+- Verify `NODE_VERSION` is set to `18` or higher
+- Ensure `NEXT_PUBLIC_API_URL` environment variable is set correctly
+- Check that the build completed successfully (look for "Compiled successfully")
+
 ### Frontend can't connect to backend
-- Verify `NEXT_PUBLIC_API_URL` is correct
+- Verify `NEXT_PUBLIC_API_URL` is correct (should be your backend Render URL)
 - Check CORS settings in `src/api.py`
 - Ensure backend is running (check Render dashboard)
+- Verify backend URL is accessible (try opening it in browser)
 
 ### Spotify auth fails
 - Verify redirect URI in Spotify dashboard matches backend URL exactly
