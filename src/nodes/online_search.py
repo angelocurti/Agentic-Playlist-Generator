@@ -9,13 +9,13 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from typing import List, Dict, Any
 
 # --- CONFIGURATION ---
-MAX_ITERATIONS = 10 # Increased for deeper research
-MIN_SONGS_FOR_EARLY_STOP = 25 # Higher threshold for quality
+MAX_ITERATIONS = 5 # Reduced for speed - encourages massive parallel calls
+MIN_SONGS_FOR_EARLY_STOP = 20
 
 async def _run_agentic_search(playlist_context: str, user_request: str):
     """
-    Executes a DEEP AGENTIC SEARCH where the LLM autonomously decides which MCP tools to call.
-    OPTIMIZED FOR QUALITY: Prioritizes deep understanding and curation over speed.
+    Executes a FAST & AUTONOMOUS AGENTIC SEARCH.
+    OPTIMIZED FOR SPEED: Parallelizes tool calls and removes rigid steps.
     """
     server_params = StdioServerParameters(
         command="python",
@@ -39,9 +39,10 @@ async def _run_agentic_search(playlist_context: str, user_request: str):
                 }
                 tools_description.append(tool_info)
             
-            # HIGH QUALITY SYSTEM PROMPT
+            # HIGH SPEED AUTONOMOUS PROMPT
             agent_prompt = f"""
-You are an Elite Music Curator and Researcher. You have access to advanced MCP tools:
+You are an Elite Music Curator optimized for SPEED and AUTONOMY.
+You have access to these tools:
 
 {json.dumps(tools_description, indent=2)}
 
@@ -49,30 +50,25 @@ YOUR GOAL: Create a "Perfect Playlist" based on:
 - Context: {playlist_context}
 - User Request: {user_request}
 
-RESEARCH STRATEGY (Do not skip steps):
-1. **ANALYZE**: First, use `analyze_musical_vibe_deep` to deconstruct the request into genres, textures, and moods.
-2. **EXPLORE**: Use `search_curated_tracklist` (mainstream/underground/critics) to find core tracks.
-3. **REFINE**: If the user mentioned specific themes, use `search_lyrical_themes`. If they mentioned an era, use `search_music_history_context`.
-4. **VERIFY**: Use `get_spotify_audio_features_batch` on key tracks to ensure the BPM/Energy flow is correct.
-
-RULES:
-- **QUALITY OVER SPEED**: Take your time. Do not rush.
-- **DIVERSITY**: Mix hits with hidden gems unless requested otherwise.
-- **COHESION**: Ensure the final list flows well.
-- **PARALLEL CALLS**: Use parallel tool calls to be efficient, but don't sacrifice logic.
+CORE INSTRUCTIONS:
+1. **BE FAST & PARALLEL**: Do NOT work sequentially. Call MULTIPLE tools in a single turn.
+   - Example: Analyze vibe AND search for tracks AND check themes ALL AT ONCE.
+2. **BE AUTONOMOUS**: You have no fixed steps. Decide the best path to get results quickly.
+3. **MAXIMIZE COVERAGE**: Get a diverse list of songs (15-20+) as fast as possible.
 
 RESPONSE FORMATS:
 
-To call tools (Parallel allowed):
+To call tools (USE MASSIVE PARALLELISM):
 {{"action": "call_tools", "calls": [
-  {{"tool": "tool_name", "arguments": {{"arg": "value"}}}},
-  ...
+  {{"tool": "analyze_musical_vibe_deep", "arguments": {{...}}}},
+  {{"tool": "search_curated_tracklist", "arguments": {{...}}}},
+  {{"tool": "search_lyrical_themes", "arguments": {{...}}}}
 ]}}
 
-To finish:
+To finish (when you have enough good songs):
 {{"action": "finish", "final_songs": "List of songs with Title - Artist"}}
 
-Start by ANALYZING the vibe deeply.
+GOAL: Get the job done in 1-2 turns maximum.
 DO NOT use markdown code blocks (```json). Just return the raw JSON string.
 """
             
