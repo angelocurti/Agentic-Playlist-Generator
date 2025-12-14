@@ -2,7 +2,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_perplexity import ChatPerplexity
 from src.config import GOOGLE_API_KEY, PPLX_API_KEY
 
-ORCH_MODEL = "gemini-2.5-flash-lite"
+ORCH_MODEL = "gemini-2.5-flash"
 PPLX_MODEL = "sonar"        
 
 

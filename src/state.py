@@ -9,3 +9,5 @@ class State(TypedDict):
     error : Optional[str]
     playlist_context: str
     spotify_token: Optional[str]
+    refresh_token: Optional[str]
+    expires_at: Optional[int]

@@ -188,10 +188,28 @@ async def spotify_callback(code: str):
     try:
         token_info = sp_oauth.get_access_token(code)
         access_token = token_info["access_token"]
-        # Redirect to frontend with token (in production use secure cookies/session)
-        return RedirectResponse(url=f"http://localhost:3000?spotify_token={access_token}")
+        refresh_token = token_info.get("refresh_token", "")
+        expires_at = token_info.get("expires_at", 0)
+        # Pass both tokens to frontend (in production use secure cookies/session)
+        return RedirectResponse(
+            url=f"http://localhost:3000?spotify_token={access_token}&refresh_token={refresh_token}&expires_at={expires_at}"
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Auth failed: {e}")
+
+
+@app.post("/auth/refresh", tags=["Auth"])
+async def refresh_spotify_token(refresh_token: str):
+    """Refreshes an expired Spotify access token."""
+    try:
+        token_info = sp_oauth.refresh_access_token(refresh_token)
+        return {
+            "access_token": token_info["access_token"],
+            "refresh_token": token_info.get("refresh_token", refresh_token),
+            "expires_at": token_info.get("expires_at", 0)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Token refresh failed: {e}")
 
 # --- MODELS ---
 
@@ -199,6 +217,8 @@ class PlaylistRequest(BaseModel):
     description: str
     duration_minutes: Optional[int] = 60
     spotify_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    expires_at: Optional[int] = None
     
     model_config = ConfigDict(
         json_schema_extra={
@@ -264,7 +284,7 @@ def clean_perplexity_output(text: str) -> str:
 
 # --- ASYNC BACKGROUND TASK ---
 
-async def generate_playlist_async(task_id: str, description: str, duration_minutes: int, spotify_token: Optional[str] = None):
+async def generate_playlist_async(task_id: str, description: str, duration_minutes: int, spotify_token: Optional[str] = None, refresh_token: Optional[str] = None, expires_at: Optional[int] = None):
     """Task ASYNC per generare la playlist con persistenza."""
     import time
     start_time = time.time()
@@ -279,7 +299,9 @@ async def generate_playlist_async(task_id: str, description: str, duration_minut
         cfg = {"configurable": {"thread_id": task_id}}
         inputs = {
             "messages": [HumanMessage(content=description)],
-            "spotify_token": spotify_token
+            "spotify_token": spotify_token,
+            "refresh_token": refresh_token,
+            "expires_at": expires_at
         }
         
         update_task(task_id, {"progress": "Searching over millions of sources..."})
@@ -448,7 +470,9 @@ async def generate_playlist(request: PlaylistRequest, background_tasks: Backgrou
         task_id, 
         request.description, 
         request.duration_minutes,
-        request.spotify_token # Pass spotify_token to the background task
+        request.spotify_token,
+        request.refresh_token,
+        request.expires_at
     )
     
     return PlaylistResponse(

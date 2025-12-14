@@ -1,5 +1,5 @@
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from spotipy.oauth2 import SpotifyOAuth, CacheHandler
 from src.state import State
 from src.config import SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI
 from src.models import llm_orch
@@ -10,37 +10,101 @@ import time
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional, Tuple
+import threading
 
-# --- SPOTIFY CLIENT CACHING ---
-_spotify_client = None
-_spotify_user_id = None
-
-def get_spotify_client() -> Tuple[spotipy.Spotify, str]:
-    """Restituisce un client Spotify cached (riutilizzato)"""
-    global _spotify_client, _spotify_user_id
+# --- CACHE HANDLER IN MEMORIA PER TOKEN UTENTE ---
+class MemoryCacheHandler(CacheHandler):
+    """Cache handler in memoria per token utente."""
+    def __init__(self, token_info: Dict[str, Any]):
+        self._token_info = token_info
     
-    if _spotify_client is None:
-        _spotify_client = spotipy.Spotify(auth_manager=SpotifyOAuth(
+    def get_cached_token(self):
+        return self._token_info
+    
+    def save_token_to_cache(self, token_info):
+        self._token_info = token_info
+
+
+# --- SPOTIFY CLIENT CACHING (SOLO PER SERVER) ---
+_server_spotify_client = None
+_server_spotify_user_id = None
+_server_client_lock = threading.Lock()
+
+def get_server_spotify_client() -> Tuple[spotipy.Spotify, str]:
+    """
+    Restituisce un client Spotify cached per uso server.
+    Usa SOLO auth_manager - refresh automatico garantito.
+    """
+    global _server_spotify_client, _server_spotify_user_id
+    
+    with _server_client_lock:
+        if _server_spotify_client is None:
+            auth_manager = SpotifyOAuth(
+                client_id=SPOTIPY_CLIENT_ID,
+                client_secret=SPOTIPY_CLIENT_SECRET,
+                redirect_uri=SPOTIPY_REDIRECT_URI,
+                scope="playlist-modify-public playlist-modify-private user-read-email",
+                cache_path=".spotify_server_cache"
+            )
+            _server_spotify_client = spotipy.Spotify(auth_manager=auth_manager)
+            _server_spotify_user_id = _server_spotify_client.current_user()["id"]
+            print(f"[Spotify] Server client initialized for user: {_server_spotify_user_id}")
+    
+    return _server_spotify_client, _server_spotify_user_id
+
+
+def get_user_spotify_client(access_token: str, refresh_token: Optional[str] = None, expires_at: Optional[int] = None) -> Tuple[Optional[spotipy.Spotify], Optional[str]]:
+    """
+    Crea un client Spotify per utente usando SOLO auth_manager.
+    Nessun token manuale - tutto gestito da SpotifyOAuth.
+    """
+    if not refresh_token:
+        print(f"[Spotify] ✗ No refresh_token provided for user")
+        return None, None
+    
+    try:
+        # Costruisci token_info completo
+        token_info = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": expires_at or int(time.time()) + 3600,  # Default 1h se non specificato
+            "token_type": "Bearer"
+        }
+        
+        # Crea cache handler con token_info
+        cache_handler = MemoryCacheHandler(token_info)
+        
+        # Crea auth_manager con cache handler custom
+        auth_manager = SpotifyOAuth(
             client_id=SPOTIPY_CLIENT_ID,
             client_secret=SPOTIPY_CLIENT_SECRET,
             redirect_uri=SPOTIPY_REDIRECT_URI,
-            scope="playlist-modify-public playlist-modify-private user-read-email"
-        ))
-        _spotify_user_id = _spotify_client.current_user()["id"]
-        print(f"[Spotify] Client initialized for user: {_spotify_user_id}")
-    
-    return _spotify_client, _spotify_user_id
+            scope="playlist-modify-public playlist-modify-private user-read-email",
+            cache_handler=cache_handler  # Usa il nostro cache handler
+        )
+        
+        # Crea client - auth_manager gestisce refresh automatico
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+        user_id = sp.current_user()["id"]
+        print(f"[Spotify] ✓ User client initialized for user: {user_id}")
+        return sp, user_id
+        
+    except Exception as e:
+        print(f"[Spotify] ✗ User auth failed: {e}")
+        return None, None
 
 
-# --- LRU CACHE PER RICERCHE SPOTIFY (OTTIMIZZAZIONE 3) ---
+# --- LRU CACHE PER RICERCHE SPOTIFY (SENZA CLIENT CONDIVISO) ---
 # Cache di 1000 query recenti - evita ricerche duplicate
 @lru_cache(maxsize=1000)
-def _cached_spotify_search(query: str) -> Optional[str]:
+def _cached_spotify_search(query: str, client_type: str = "server") -> Optional[str]:
     """
     Cerca una traccia su Spotify con cache LRU.
+    Crea un nuovo client per ogni ricerca (thread-safe).
     Ritorna JSON string dei risultati o None.
     """
-    sp, _ = get_spotify_client()
+    # Crea sempre un nuovo client per evitare problemi di thread
+    sp, _ = get_server_spotify_client()
     try:
         results = sp.search(q=query, type="track", limit=1)
         tracks = results["tracks"]["items"]
@@ -156,17 +220,22 @@ IMPORTANTE: Rispondi SOLO con il JSON, senza altro testo."""
             print(f"Error parsing songs: {e2}")
             return {"error": "Failed to parse songs from search results"}
 
-    # 2. Get Spotify Client (User or Server)
+    # 2. Get Spotify Client (User or Server) - SOLO auth_manager
     spotify_token = state.get("spotify_token")
+    refresh_token = state.get("refresh_token")
+    expires_at = state.get("expires_at")
     
     try:
-        if spotify_token:
-            print(f"[Playlist] Using USER Spotify token")
-            sp = spotipy.Spotify(auth=spotify_token)
-            user_id = sp.current_user()["id"]
+        if spotify_token and refresh_token:
+            print(f"[Playlist] Using USER Spotify token (auth_manager)")
+            sp, user_id = get_user_spotify_client(spotify_token, refresh_token, expires_at)
+            if sp is None:
+                # Fallback to server client if user auth fails
+                print(f"[Playlist] User auth failed, falling back to SERVER client")
+                sp, user_id = get_server_spotify_client()
         else:
-            print(f"[Playlist] Using SERVER Spotify client")
-            sp, user_id = get_spotify_client()
+            print(f"[Playlist] Using SERVER Spotify client (auth_manager)")
+            sp, user_id = get_server_spotify_client()
             
     except Exception as e:
         return {"error": f"Spotify authentication failed: {e}"}

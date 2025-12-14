@@ -142,11 +142,35 @@ Start by ANALYZING the vibe deeply.
                                    f"\n\nCurrent Song Count: ~{songs_count}. Continue researching until you have a PERFECT list."
                         ))
                     
+                    elif decision.get("action") == "call_tool":
+                        # Handle single tool call
+                        tool_name = decision.get("tool")
+                        arguments = decision.get("arguments", {})
+                        print(f"[Agent] ✓ Calling single tool: {tool_name}")
+                        
+                        try:
+                            result = await session.call_tool(tool_name, arguments=arguments)
+                            tool_output = result.content[0].text
+                            collected_data.append(f"[{tool_name}]: {tool_output}")
+                            songs_count += tool_output.count("-")
+                            print(f"[Agent]   ✓ {tool_name} completed")
+                            
+                            messages.append(HumanMessage(
+                                content=f"[{tool_name} Output]:\n{tool_output}\n\nCurrent Song Count: ~{songs_count}. Continue researching until you have a PERFECT list."
+                            ))
+                        except Exception as e:
+                            error_msg = f"ERROR in {tool_name}: {str(e)}"
+                            print(f"[Agent]   ✗ {error_msg}")
+                            messages.append(HumanMessage(content=error_msg))
+                    
                     else:
-                        # Handle single tool call legacy or other actions
+                        # Handle other actions or early stop
                         if collected_data and songs_count > MIN_SONGS_FOR_EARLY_STOP:
                              return "\n\n".join(collected_data)
-                        pass
+                        # No valid action, prompt the LLM to respond correctly
+                        messages.append(HumanMessage(
+                            content="Please respond with a valid action: call_tool, call_tools, or finish."
+                        ))
                         
                 except json.JSONDecodeError:
                     print("[Agent] ⚠ Invalid JSON response")

@@ -32,7 +32,7 @@ PPLX_API_KEY = os.getenv("PPLX_API_KEY")
 if PPLX_API_KEY:
     pplx_client = ChatPerplexity(
         api_key=PPLX_API_KEY,
-        model="sonar-reasoning", # Using reasoning model for higher quality
+        model="sonar", # Using reasoning model for higher quality
         temperature=0.2 # Lower temperature for more factual/precise results
     )
     PERPLEXITY_AVAILABLE = True
